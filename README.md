@@ -1,4 +1,4 @@
-# PCB-Differential-Impedance-Calculator
+# Kicad-Differential-Impedance-Calculator
 # Python 3.8 or later is required.
 Useful for Kicad 
 
