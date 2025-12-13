@@ -5,22 +5,102 @@ import copy
 import re 
 import csv 
 
-# --- Renk Tanımları (Değişmedi) ---
+# --- Dil Sözlükleri (Sadece İngilizce) ---
+MESSAGES = {
+    # General
+    "TITLE": "Kicad-Differential-Impedance-Calculator (Version 1.0)",
+    "DESIGNED_BY": "Designed by Muzaffer Nizam",
+    "SUCCESS": "Data synchronized successfully!",
+    "ERROR_SYNC": "Synchronization Error",
+    "ERROR_INPUT": "Input Error",
+    "ERROR_CALC": "Calculation Error",
+    "ERROR_UNKNOWN": "An unexpected error occurred",
+    "PLEASE_SAVE": "Please synchronize data before switching tabs.",
+    
+    # Tabs
+    "TAB_STACKUP": "Stackup Editing (Dynamic)",
+    "TAB_CALC": "Geometry & Calculation",
+    "TAB_STANDARDS": "Standard Impedances",
+    
+    # Stackup Controls
+    "COPPER_COUNT": "Copper Layer Count:",
+    "TOTAL_THICKNESS": "Total PCB Thickness:",
+    "MM": "mm",
+    "EXPORT_CSV": "Export to CSV",
+    "IMPORT_CSV": "Import from CSV",
+    "SYNC_SAVE": "Save Stackup Data / Synchronize",
+    
+    # Stackup Table Headers
+    "COL_NAME": "Layer Name",
+    "COL_CLASS": "Class",
+    "COL_THICKNESS": "Thickness (mm)",
+    "COL_DK": "Dk (Er)",
+
+    # Calculation Inputs
+    "GROUP_GEOM": "Trace Geometry Parameters (mm)",
+    "LABEL_W": "Trace Width (W):",
+    "LABEL_GAP": "Gap Between Traces (Gap):",
+    "LABEL_S": "Space to Ground (S):",
+    "LABEL_Z0_TARGET": "Target Impedance (Z0, Ω):",
+    "LABEL_TOLERANCE": "Tolerance (± %):",
+    
+    # Calculation Mapping
+    "GROUP_MAPPING": "Calculation Parameters Mapping",
+    "MAP_PARAM": "Formula Parameter",
+    "MAP_SOURCE": "Data Source",
+    "MAP_H": "Distance to Nearest Plane",
+    "MAP_ER": "Effective (Average) Dk",
+    
+    # Calculation Results
+    "CALC_LAYER": "Layer to Calculate:",
+    "CALC_BUTTON": "Calculate Impedance",
+    "GROUP_RESULTS": "Calculation Results",
+    "LABEL_ZDIFF": "Differential Impedance (Zdiff):",
+    "OHMS": "Ohms",
+    "LABEL_STATUS": "Result:",
+    "STATUS_OK": "Impedance PASS",
+    "STATUS_FAIL": "Impedance FAIL",
+    "LABEL_USED_PARAMS": "Used H, T, Er:",
+    "LABEL_MODEL": "Model Selection:",
+    "LABEL_CPWG": "CPWG Control:",
+    "CPWG_IGNORED": "(Lateral Ground S ignored, since S > H)",
+    "CPWG_APPLIED": "(Lateral Ground S EFFECTIVE! CPWG Correction Applied)",
+    
+    # Standards Table Headers
+    "STD_INTERFACE": "Interface",
+    "STD_NOMINAL_Z": "Nominal Differential Impedance (Ω)",
+    "STD_TOLERANCE": "Typical Tolerance (± %)",
+    "STD_NOTES": "Notes",
+    
+    # Standard Notes Content
+    "NOTE_PCIE": "PCI-SIG specification; 100Ω targeted for PCB, 85Ω may be preferred in low-loss designs.",
+    "NOTE_ETH": "IEEE 802.3; compatible with twisted pair cables, ±5% tighter tolerance possible.",
+    "NOTE_USB2": "USB-IF specification; single-ended 45Ω.",
+    "NOTE_USB3": "USB-IF; for SuperSpeed pairs, ±15% common.",
+    "NOTE_CAN": "ISO 11898; ±20% for cable, ±10% recommended for PCB; common in automotive.",
+    "NOTE_RS485": "EIA/TIA-485; standard for twisted pair cables, matched with termination resistor; industrial networks.",
+    "NOTE_RS422": "EIA/TIA-422; generally 120Ω cables are used, 100Ω may be acceptable on PCB; for multi-drop.",
+    "NOTE_LVDS": "TIA/EIA-644A; for general high-speed video/signal interfaces (e.g., display connections).",
+    "NOTE_HDMI": "HDMI specification; for TMDS (Transition-Minimized Differential Signaling) pairs.",
+    "NOTE_ETHCAT": "ETG specification; industrial Ethernet, based on twisted-pair.",
+    "NOTE_MIL": "US military standard; avionics data bus, used in DO-254 compliant designs.",
+    "NOTE_PROFIBUS": "IEC 61158; industrial automation, RS-485 based.",
+}
+
+# --- Sabit Renkler ve Şablonlar (Değişmedi) ---
 COLOR_COPPER = "#CF8534"    
 COLOR_SOLDER_MASK = "#228B22" 
 COLOR_CORE = "#808080"        
 COLOR_PREPREG = "#C0C0C0"     
-COLOR_HEADER = "#2E8B57"      # Ana Stackup Başlık Rengi
-COLOR_MAPPING_HEADER = "#2E8B57" # Eşleştirme tablosu için de aynı rengi kullanıyoruz
+COLOR_HEADER = "#2E8B57"      
+COLOR_MAPPING_HEADER = "#2E8B57" 
 COLOR_TEXT_LIGHT = "white"
-COLOR_TEXT_DARK = "black"
-COLOR_STANDARD_HEADER = "#36454F" # Yeni Tablo Başlık Rengi (Koyu Gri/Siyah)
-COLOR_SYNC_BUTTON_BG = "#0056b3" # Koyu Mavi Buton Arka Planı 
-COLOR_SYNC_BUTTON_FG = "black"   # SİYAH Buton Yazısı
-COLOR_SUCCESS = "green"          # Yeşil başarı rengi
+COLOR_TEXT_DARK = "black" # Siyah Metin Rengi
+COLOR_STANDARD_HEADER = "#36454F" 
+COLOR_SYNC_BUTTON_BG = "#0056b3" 
+COLOR_SYNC_BUTTON_FG = "black"   
+COLOR_SUCCESS = "green"          
 
-# --- Sabit Stackup Şablonları (Değişmedi) ---
-# [Name, Class, Thickness, Dk, Layer_Type] 
 COPPER_TEMPLATE = ["", "Signal", "0.018", "", "Copper"] 
 SOLDER_MASK_TOP = ["Top Solder", "Solder Mask", "0.01", "3.5", "Solder Mask"] 
 SOLDER_MASK_BOTTOM = ["Bottom Solder", "Solder Mask", "0.01", "3.5", "Solder Mask"]
@@ -49,9 +129,10 @@ def calculate_narrow_traces(W, S_track, T, H, Er):
 class ImpedanceCalculatorApp:
     def __init__(self, master):
         self.master = master
-        # BAŞLIK GÜNCELLENDİ
-        master.title("Kicad-Differential-Impedance-Calculator (Version 1.0)") 
         
+        # Tek Dil: İngilizce
+        self.current_lang = MESSAGES 
+
         self.layer_options = [2, 4, 6, 8, 10, 12, 14, 16]
         self.num_layers_var = tk.StringVar(value=str(self.layer_options[2])) 
         self.num_layers_var.trace_add('write', self.on_layer_count_change) 
@@ -59,13 +140,11 @@ class ImpedanceCalculatorApp:
         self.W_var = tk.StringVar(value="0.2")    
         self.Gap_var = tk.StringVar(value="0.2")  
         self.S_var = tk.StringVar(value="1.0")    
-        
         self.target_zdiff_var = tk.StringVar(value="100.0") 
         self.tolerance_percent_var = tk.StringVar(value="10.0") 
 
         self.stackup_data = [] 
         self.entry_vars = [] 
-        
         self.signal_layers = []
         self.selected_layer = tk.StringVar() 
         
@@ -83,14 +162,19 @@ class ImpedanceCalculatorApp:
         self.zdiff_result_label = None 
         self.status_label = None 
         self.sync_status_label = None 
+        self.notebook = None 
 
         self.setup_styles()
         self.vcmd_float = (master.register(self.validate_float_input), '%P')
         
         self.create_widgets()
         self.generate_stackup_data(int(self.num_layers_var.get()))
+        self.update_main_title()
 
-    # --- Validasyon Fonksiyonu (Değişmedi) ---
+    # Dil Seçimi ve Yenileme Fonksiyonları kaldırıldı
+    def update_main_title(self):
+        self.master.title(self.current_lang["TITLE"])
+        
     def validate_float_input(self, P):
         if P == "":
             return True
@@ -162,7 +246,7 @@ class ImpedanceCalculatorApp:
             return "Dielectric.TLabel"
         return "Cell.TLabel"
 
-    # --- Dinamik Stackup Oluşturma Mantığı (GÜNCELLENDİ) ---
+    # --- Dinamik Stackup Oluşturma Mantığı (Değişmedi) ---
 
     def generate_stackup_data(self, num_copper_layers):
         
@@ -184,13 +268,11 @@ class ImpedanceCalculatorApp:
             
             layer_class = "Signal" 
             
-            # --- YENİ KATMAN SINIFLANDIRMA MANTIĞI ---
+            # --- KATMAN SINIFLANDIRMA MANTIĞI ---
             
             if num_copper_layers == 2:
-                if i == 0: 
-                    layer_class = "Signal"
-                elif i == 1: 
-                    layer_class = "Plane"
+                if i == 0: layer_class = "Signal"
+                elif i == 1: layer_class = "Plane"
             
             elif num_copper_layers == 4:
                 # L1=Signal, L2=Plane, L3=Plane, L4=Signal
@@ -216,7 +298,6 @@ class ImpedanceCalculatorApp:
                     layer_class = "Plane"
             
             copper_layer[1] = layer_class
-            # ----------------------------------------
             
             new_stackup.append(copper_layer)
             
@@ -264,14 +345,14 @@ class ImpedanceCalculatorApp:
             
             self.update_total_thickness()
             
-            self.sync_status_var.set("Veriler Başarıyla Senkronize Edildi!")
+            self.sync_status_var.set(self.current_lang["SUCCESS"])
             if self.sync_status_label:
                 self.sync_status_label.config(foreground=COLOR_SUCCESS)
                 self.master.after(2000, lambda: self.sync_status_var.set(""))
 
         except Exception as e:
-            messagebox.showerror("Hata", f"Stackup senkronizasyonu başarısız oldu: {e}")
-            self.sync_status_var.set("Hata: Senkronizasyon Başarısız!")
+            messagebox.showerror(self.current_lang["ERROR_SYNC"], f"{self.current_lang['ERROR_UNKNOWN']}: {e}")
+            self.sync_status_var.set(self.current_lang["ERROR_SYNC"])
             if self.sync_status_label:
                 self.sync_status_label.config(foreground="red")
             self.master.after(3000, lambda: self.sync_status_var.set(""))
@@ -294,7 +375,7 @@ class ImpedanceCalculatorApp:
         
         self.total_thickness_var.set(f"{total:.3f}")
 
-    # --- CSV İşlemleri (Değişmedi) ---
+    # --- CSV İşlemleri ---
 
     def export_to_csv(self):
         self.update_stackup_data() 
@@ -303,11 +384,11 @@ class ImpedanceCalculatorApp:
             filepath = filedialog.asksaveasfilename(
                 defaultextension=".csv",
                 filetypes=[("CSV files", "*.csv")],
-                title="Stackup Verilerini Kaydet"
+                title=self.current_lang["EXPORT_CSV"]
             )
             
             if filepath:
-                headers = ["Layer Number", "Katman Adı", "Sınıf", "Kalınlık (mm)", "Dk (Er)"]
+                headers = ["Layer Number", self.current_lang["COL_NAME"], self.current_lang["COL_CLASS"], self.current_lang["COL_THICKNESS"], self.current_lang["COL_DK"]]
                 
                 with open(filepath, 'w', newline='', encoding='utf-8') as f:
                     writer = csv.writer(f, delimiter=';') 
@@ -324,12 +405,12 @@ class ImpedanceCalculatorApp:
                         ]
                         writer.writerow(row_list)
                         
-                    writer.writerow(["", "TOTAL PCB THICKNESS:", "", self.total_thickness_var.get(), "mm"])
+                    writer.writerow(["", self.current_lang["TOTAL_THICKNESS"], "", self.total_thickness_var.get(), self.current_lang["MM"]])
 
-                messagebox.showinfo("Başarılı", f"Veriler başarıyla {filepath} adresine CSV olarak aktarıldı.")
+                messagebox.showinfo(self.current_lang["SUCCESS"], f"{self.current_lang['SUCCESS']} (CSV: {filepath})")
             
         except Exception as e:
-            messagebox.showerror("Hata", f"CSV'ye aktarım başarısız oldu: {e}")
+            messagebox.showerror(self.current_lang["ERROR_SYNC"], f"{self.current_lang['ERROR_UNKNOWN']}: {e}")
 
     def clean_dk_value(self, value):
         value = str(value).strip()
@@ -349,7 +430,7 @@ class ImpedanceCalculatorApp:
             filepath = filedialog.askopenfilename(
                 defaultextension=".csv",
                 filetypes=[("CSV files", "*.csv")],
-                title="Stackup Verilerini Yükle"
+                title=self.current_lang["IMPORT_CSV"]
             )
             
             if not filepath:
@@ -366,11 +447,11 @@ class ImpedanceCalculatorApp:
 
                 headers = next(reader) 
                 for row in reader:
-                    if len(row) > 3 and "TOTAL" not in row[1]: 
+                    if len(row) > 3 and self.current_lang["TOTAL_THICKNESS"] not in row[1]: 
                         data.append(row)
             
             if not data or len(data) != len(self.stackup_data):
-                 messagebox.showerror("Hata", f"Yüklenen dosyadaki satır sayısı ({len(data)}) mevcut stackup ({len(self.stackup_data)}) ile eşleşmiyor. Lütfen doğru katman sayısına sahip bir dosya yükleyin.")
+                 messagebox.showerror(self.current_lang["ERROR_INPUT"], f"Stackup size mismatch. File row count ({len(data)}) does not match existing stackup ({len(self.stackup_data)}).")
                  return
 
             for i, row in enumerate(data):
@@ -396,10 +477,10 @@ class ImpedanceCalculatorApp:
             self.redraw_stackup_table() 
             self.update_stackup_data() 
 
-            messagebox.showinfo("Başarılı", "Veriler CSV dosyasından başarıyla yüklendi ve tablo güncellendi.")
+            messagebox.showinfo(self.current_lang["SUCCESS"], self.current_lang["SUCCESS"])
 
         except Exception as e:
-            messagebox.showerror("Hata", f"CSV'den yükleme başarısız oldu: {e}")
+            messagebox.showerror(self.current_lang["ERROR_SYNC"], f"{self.current_lang['ERROR_UNKNOWN']}: {e}")
 
 
     # --- GUI Yaratma Metotları ---
@@ -408,12 +489,14 @@ class ImpedanceCalculatorApp:
         main_frame = ttk.Frame(self.master, padding="10")
         main_frame.pack(fill="both", expand=True)
 
-        notebook = ttk.Notebook(main_frame)
-        notebook.pack(pady=5, padx=5, fill="both", expand=True)
+        # Üst kontrol kısmı (Dil seçeneği kaldırıldı)
+        
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.pack(pady=5, padx=5, fill="both", expand=True)
 
         # 1. Sekme: Stackup Düzenleme
-        stackup_frame = ttk.Frame(notebook)
-        notebook.add(stackup_frame, text=' Stackup Düzenleme (Dinamik) ')
+        stackup_frame = ttk.Frame(self.notebook)
+        self.notebook.add(stackup_frame, text=self.current_lang["TAB_STACKUP"])
         
         self.setup_stackup_controls(stackup_frame)
         
@@ -424,7 +507,6 @@ class ImpedanceCalculatorApp:
         save_button_frame = ttk.Frame(stackup_frame)
         save_button_frame.pack(fill='x', pady=5, padx=5)
         
-        # Buton ve Durum mesajını tutacak container (Sağ tarafa hizalanır)
         button_and_status_container = ttk.Frame(save_button_frame)
         button_and_status_container.pack(side='right')
 
@@ -437,22 +519,22 @@ class ImpedanceCalculatorApp:
 
         # 2. Kaydet butonu (Butonun altında)
         ttk.Button(button_and_status_container, 
-                   text="Stackup Verilerini Kaydet / Senkronize Et", 
+                   text=self.current_lang["SYNC_SAVE"], 
                    command=self.update_stackup_data, 
                    style="Sync.TButton").pack(side='top')
         
         # 2. Sekme: Geometri & Hesaplama
-        calc_frame = ttk.Frame(notebook)
-        notebook.add(calc_frame, text=' Geometri & Hesaplama ')
+        calc_frame = ttk.Frame(self.notebook)
+        self.notebook.add(calc_frame, text=self.current_lang["TAB_CALC"])
         self.setup_calculation_tab(calc_frame)
         
         # 3. Sekme: Standart Empedanslar
-        standards_frame = ttk.Frame(notebook)
-        notebook.add(standards_frame, text=' Standart Empedanslar ')
+        standards_frame = ttk.Frame(self.notebook)
+        self.notebook.add(standards_frame, text=self.current_lang["TAB_STANDARDS"])
         self.setup_standards_tab(standards_frame)
         
         # Tasarımcı Bilgisi (En alta eklenmiştir)
-        designer_label = ttk.Label(main_frame, text="Designed by Muzaffer Nizam", style="Designer.TLabel")
+        designer_label = ttk.Label(main_frame, text=self.current_lang["DESIGNED_BY"], style="Designer.TLabel")
         designer_label.pack(fill='x', padx=5, pady=(0, 5))
 
 
@@ -470,7 +552,7 @@ class ImpedanceCalculatorApp:
         right_control_frame = ttk.Frame(control_frame)
         right_control_frame.pack(side='right', padx=5)
 
-        ttk.Label(left_control_frame, text="Bakır Katman Sayısı Seçimi:").pack(side='left', padx=5)
+        ttk.Label(left_control_frame, text=self.current_lang["COPPER_COUNT"]).pack(side='left', padx=5)
         ttk.Combobox(left_control_frame, 
                      textvariable=self.num_layers_var, 
                      values=self.layer_options, 
@@ -478,14 +560,14 @@ class ImpedanceCalculatorApp:
                      width=5).pack(side='left', padx=5)
         
         # CSV Butonları
-        ttk.Button(center_control_frame, text="Export to CSV", command=self.export_to_csv).pack(side='left', padx=5)
-        ttk.Button(center_control_frame, text="Import from CSV", command=self.import_from_csv).pack(side='left', padx=5)
+        ttk.Button(center_control_frame, text=self.current_lang["EXPORT_CSV"], command=self.export_to_csv).pack(side='left', padx=5)
+        ttk.Button(center_control_frame, text=self.current_lang["IMPORT_CSV"], command=self.import_from_csv).pack(side='left', padx=5)
                      
         # Sağ Taraf: Toplam Kalınlık Gösterimi
-        ttk.Label(right_control_frame, text="Total PCB Thickness:").pack(side='left')
+        ttk.Label(right_control_frame, text=self.current_lang["TOTAL_THICKNESS"]).pack(side='left')
         
         ttk.Label(right_control_frame, textvariable=self.total_thickness_var, style="Total.TLabel").pack(side='left', padx=(5, 0))
-        ttk.Label(right_control_frame, text="mm", style="Total.TLabel").pack(side='left')
+        ttk.Label(right_control_frame, text=self.current_lang["MM"], style="Total.TLabel").pack(side='left')
 
 
     def redraw_stackup_table(self):
@@ -499,7 +581,7 @@ class ImpedanceCalculatorApp:
         self.entry_vars = []
         
         # Sütun Başlıkları
-        headers = ["#", "Katman Adı", "Sınıf", "Kalınlık (mm)", "Dk (Er)"]
+        headers = ["#", self.current_lang["COL_NAME"], self.current_lang["COL_CLASS"], self.current_lang["COL_THICKNESS"], self.current_lang["COL_DK"]]
         column_widths = [30, 150, 100, 100, 100]
 
         for col, header in enumerate(headers):
@@ -527,6 +609,7 @@ class ImpedanceCalculatorApp:
             entry_name = ttk.Entry(self.table_frame, textvariable=var_name, width=column_widths[1]//10)
             entry_name.grid(row=i+1, column=1, sticky="nsew", padx=1, pady=1)
             
+            # Copper Layer Name rengi her zaman siyah
             if layer_type == "Copper":
                  entry_name.config(background=COLOR_COPPER, foreground=COLOR_TEXT_DARK)
             else:
@@ -586,15 +669,12 @@ class ImpedanceCalculatorApp:
                                       validate='key', validatecommand=self.vcmd_float)
                 entry_dk.grid(row=i+1, column=4, sticky="nsew", padx=1, pady=1)
                 
-                if layer_type == "Solder Mask":
-                    entry_dk.config(background=COLOR_SOLDER_MASK, foreground=COLOR_TEXT_LIGHT)
-                elif layer_type == "Core":
-                    entry_dk.config(background=COLOR_CORE, foreground=COLOR_TEXT_LIGHT)
-                elif layer_type == "Prepreg":
-                    entry_dk.config(background=COLOR_PREPREG, foreground=COLOR_TEXT_DARK)
-                else:
-                    entry_dk.config(background='white', foreground='black')
-                    
+                # *** DÜZELTME: Metin rengi, arka plan ne olursa olsun siyah yapılmalı. ***
+                fg_color = COLOR_TEXT_DARK
+                bg_color = COLOR_SOLDER_MASK if layer_type == "Solder Mask" else (COLOR_CORE if layer_type == "Core" else COLOR_PREPREG)
+                
+                entry_dk.config(background=bg_color, foreground=fg_color)
+                
                 row_vars.append(var_dk)
             else:
                 cell_4 = ttk.Label(self.table_frame, text="", background=COLOR_COPPER)
@@ -616,48 +696,57 @@ class ImpedanceCalculatorApp:
                 
 
     def setup_calculation_tab(self, frame):
-        # Calculation Tab ana çerçevesi
         calc_content_frame = ttk.Frame(frame, padding="10")
         calc_content_frame.pack(fill="both", expand=True)
 
-        # Giriş ve Görsel Alanı (Üst Kısım)
         top_row_frame = ttk.Frame(calc_content_frame)
         top_row_frame.pack(fill='x', pady=5)
 
-        # Giriş Alanları (Sol Taraf)
-        geom_input_frame = ttk.LabelFrame(top_row_frame, text=" İz Geometrisi Parametreleri (mm) ")
+        # Geometri Girişleri
+        geom_input_frame = ttk.LabelFrame(top_row_frame, text=self.current_lang["GROUP_GEOM"])
         geom_input_frame.pack(side='left', padx=10, fill='y')
         
         geom_vars = [
-            ("İz Genişliği (W):", self.W_var),
-            ("İzler Arası Boşluk (Gap):", self.Gap_var),
-            ("Yan Toprağa Boşluk (S):", self.S_var),
-            ("Hedef Empedans (Z0, Ω):", self.target_zdiff_var),
-            ("Tolerans (± %):", self.tolerance_percent_var)      
+            (self.current_lang["LABEL_W"], self.W_var),
+            (self.current_lang["LABEL_GAP"], self.Gap_var),
+            (self.current_lang["LABEL_S"], self.S_var),
+            (self.current_lang["LABEL_Z0_TARGET"], self.target_zdiff_var),
+            (self.current_lang["LABEL_TOLERANCE"], self.tolerance_percent_var)      
         ]
         
         for i, (label_text, var) in enumerate(geom_vars):
             ttk.Label(geom_input_frame, text=label_text).grid(row=i, column=0, padx=5, pady=5, sticky="w")
             ttk.Entry(geom_input_frame, textvariable=var, width=15, validate='key', validatecommand=self.vcmd_float).grid(row=i, column=1, padx=5, pady=5)
             
-        # Görsel Alanı (Sağ Taraf) - EŞLEŞTİRME TABLOSU (Stackup başlığı stili kullanılarak)
-        mapping_frame = ttk.LabelFrame(top_row_frame, text=" Hesaplama Parametreleri Eşleştirme ")
+        # Parametre Haritalama
+        mapping_frame = ttk.LabelFrame(top_row_frame, text=self.current_lang["GROUP_MAPPING"])
         mapping_frame.pack(side='left', padx=10, fill='both', expand=True)
         
-        mapping_data = [
-            ("W (İz Genişliği)", "W_var (Kullanıcı Girişi)"),
-            ("S (İz Arası Boşluk)", "Gap_var (Kullanıcı Girişi)"),
-            ("T (Bakır Kalınlığı)", "Seçilen Katman Thickness (Stackup)"),
-            ("H (Dielektrik Yüksekliği)", "En Yakın Plane'e Olan Mesafe"),
-            ("Er (Dielektrik Sabiti)", "Etkin (Ortalama) Dk"),
-            ("S (Yan Toprak)", "S_var (CPWG Kontrolü)")
-        ]
+        # Haritalama Tablosu İçeriği için Dinamik Metin Oluşturma
+        map_param_w = self.current_lang["LABEL_W"].split(':')[0]
+        map_param_gap = self.current_lang["LABEL_GAP"].split(':')[0]
+        map_param_t = self.current_lang["COL_THICKNESS"].split(' ')[0]
+        map_param_dk = self.current_lang["COL_DK"].split(' ')[0]
+        map_param_s = self.current_lang["LABEL_S"].split(':')[0]
         
-        # Tablo Başlıkları (MappingHeader.TLabel ile Stackup başlığı stili kullanıldı)
-        ttk.Label(mapping_frame, text="Formül Parametresi", style="MappingHeader.TLabel").grid(row=0, column=0, sticky="nsew")
-        ttk.Label(mapping_frame, text="Veri Kaynağı", style="MappingHeader.TLabel").grid(row=0, column=1, sticky="nsew")
+        map_source_input = self.current_lang["ERROR_INPUT"].split(' ')[0]
+        map_source_thickness = self.current_lang["COL_THICKNESS"]
+        map_source_map_h = self.current_lang["MAP_H"]
+        map_source_map_er = self.current_lang["MAP_ER"]
+        map_source_cpwg = self.current_lang["CPWG_IGNORED"].split('(')[1].split(')')[0]
+        
+        mapping_data = [
+            (map_param_w, f"{map_param_w}_var ({map_param_w} ({map_source_input}))"),
+            (map_param_gap, f"{map_param_gap}_var ({map_param_gap} ({map_source_input}))"),
+            (f"{map_param_t} (T)", f"{map_source_thickness} (Stackup)"),
+            (f"{map_param_t} (H)", map_source_map_h),
+            (f"{map_param_dk} (Er)", map_source_map_er),
+            (f"{map_param_s}", f"{map_param_s}_var ({map_source_cpwg})")
+        ]
 
-        # Tablo Verileri
+        ttk.Label(mapping_frame, text=self.current_lang["MAP_PARAM"], style="MappingHeader.TLabel").grid(row=0, column=0, sticky="nsew")
+        ttk.Label(mapping_frame, text=self.current_lang["MAP_SOURCE"], style="MappingHeader.TLabel").grid(row=0, column=1, sticky="nsew")
+
         for i, (param, source) in enumerate(mapping_data):
             ttk.Label(mapping_frame, text=param, style="Mapping.TLabel").grid(row=i+1, column=0, sticky="nsew", padx=1, pady=1)
             ttk.Label(mapping_frame, text=source, style="Mapping.TLabel").grid(row=i+1, column=1, sticky="nsew", padx=1, pady=1)
@@ -665,12 +754,11 @@ class ImpedanceCalculatorApp:
         mapping_frame.grid_columnconfigure(0, weight=1)
         mapping_frame.grid_columnconfigure(1, weight=1)
 
-        # Kontrol ve Sonuç Alanları (Alt Kısım)
-        
         control_frame = ttk.Frame(calc_content_frame)
         control_frame.pack(pady=10, fill='x', padx=10)
 
-        ttk.Label(control_frame, text="Hesaplanacak Katman:").pack(side='left', padx=5)
+        # Hesaplama Kontrolleri
+        ttk.Label(control_frame, text=self.current_lang["CALC_LAYER"]).pack(side='left', padx=5)
         
         self.layer_select_combobox = ttk.Combobox(control_frame, 
                                                  textvariable=self.selected_layer, 
@@ -679,85 +767,78 @@ class ImpedanceCalculatorApp:
                                                  width=20)
         self.layer_select_combobox.pack(side='left', padx=5)
 
-        calc_button = ttk.Button(control_frame, text="Empedansı Hesapla", command=self.calculate_impedance)
-        calc_button.pack(side='right', padx=5)
+        ttk.Button(control_frame, text=self.current_lang["CALC_BUTTON"], command=self.calculate_impedance).pack(side='right', padx=5)
 
-        # Sonuç Alanları
-        result_frame = ttk.LabelFrame(calc_content_frame, text=" Hesaplama Sonuçları ")
+        # Sonuç Alanı
+        result_frame = ttk.LabelFrame(calc_content_frame, text=self.current_lang["GROUP_RESULTS"])
         result_frame.pack(padx=10, pady=5, fill="x")
         
-        # 0. Satır: Empedans Değeri ve Birim
-        ttk.Label(result_frame, text="Diferansiyel Empedans (Zdiff):", font=('Arial', 10)).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        ttk.Label(result_frame, text=self.current_lang["LABEL_ZDIFF"], font=('Arial', 10)).grid(row=0, column=0, padx=5, pady=5, sticky="w")
         
         self.zdiff_result_label = ttk.Label(result_frame, textvariable=self.Zdiff_result, font=('Arial', 16, 'bold'), foreground='blue')
         self.zdiff_result_label.grid(row=0, column=1, padx=5, pady=5, sticky="w")
         
-        ttk.Label(result_frame, text="Ohms", font=('Arial', 10)).grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        ttk.Label(result_frame, text=self.current_lang["OHMS"], font=('Arial', 10)).grid(row=0, column=2, padx=5, pady=5, sticky="w")
         
-        # Yeni Satır: Uygunluk Durumu
-        ttk.Label(result_frame, text="Sonuç:", font=('Arial', 10)).grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        ttk.Label(result_frame, text=self.current_lang["LABEL_STATUS"], font=('Arial', 10)).grid(row=1, column=0, padx=5, pady=5, sticky="w")
         
         self.status_label = ttk.Label(result_frame, textvariable=self.tolerance_status_var, style="Status.TLabel")
         self.status_label.grid(row=1, column=1, columnspan=2, padx=5, pady=5, sticky="w")
         
         ttk.Separator(result_frame, orient='horizontal').grid(row=2, column=0, columnspan=3, sticky="ew", pady=5)
         
-        # Geri kalan parametre bilgileri (row 3 ve sonrası, önceki kodla uyumlu)
-        ttk.Label(result_frame, text="Kullanılan H, T, Er:").grid(row=3, column=0, padx=5, pady=5, sticky="w")
+        ttk.Label(result_frame, text=self.current_lang["LABEL_USED_PARAMS"]).grid(row=3, column=0, padx=5, pady=5, sticky="w")
         ttk.Label(result_frame, textvariable=self.params_used).grid(row=3, column=1, columnspan=2, padx=5, pady=5, sticky="w")
-        ttk.Label(result_frame, text="Model Seçimi:").grid(row=4, column=0, padx=5, pady=5, sticky="w")
+        ttk.Label(result_frame, text=self.current_lang["LABEL_MODEL"]).grid(row=4, column=0, padx=5, pady=5, sticky="w")
         ttk.Label(result_frame, textvariable=self.model_info, wraplength=200).grid(row=4, column=1, columnspan=2, padx=5, pady=5, sticky="w")
-        ttk.Label(result_frame, text="CPWG Kontrolü:").grid(row=5, column=0, padx=5, pady=5, sticky="w")
+        ttk.Label(result_frame, text=self.current_lang["LABEL_CPWG"]).grid(row=5, column=0, padx=5, pady=5, sticky="w")
         ttk.Label(result_frame, textvariable=self.cpwg_info, wraplength=200).grid(row=5, column=1, columnspan=2, padx=5, pady=5, sticky="w")
         
     def setup_standards_tab(self, frame):
-        """Üçüncü sekme için standart empedans tablosunu oluşturur (LIN Bus kaldırıldı)."""
+        """Üçüncü sekme için standart empedans tablosunu oluşturur."""
         
+        # Standart Veriler MESSAGES'tan çekiliyor
         standards_data = [
-            ("Arayüz", "Nominal Diferansiyel Empedans (Ω)", "Tipik Tolerans (± %)", "Notlar"),
-            ("PCI Express (PCIe, Gen1-6)", "100 (veya Gen2+ için 85)", "10", "PCI-SIG spesifikasyonu; PCB için 100Ω hedeflenir, düşük kayıplı tasarımlarda 85Ω tercih edilebilir."),
-            ("Ethernet (1000BASE-T)", "100", "10", "IEEE 802.3; twisted pair kablolarla uyumlu, ±%5 daha sıkı tolerans mümkün."),
-            ("USB 2.0", "90", "15", "USB-IF spesifikasyonu; single-ended 45Ω."),
-            ("USB 3.0 / 3.x", "90", "10-15", "USB-IF; SuperSpeed çiftleri için, ±%15 yaygın."),
-            ("CAN Bus", "120", "10-20", "ISO 11898; kablo için ±%20, PCB için ±%10 önerilir; otomotiv yaygın."),
-            ("RS-485", "120", "20", "EIA/TIA-485; twisted pair kablolar için standart, terminasyon direnciyle eşleştirilir; endüstriyel ağlar."),
-            ("RS-422", "100-120", "20", "EIA/TIA-422; genellikle 120Ω kablolar kullanılır, PCB'de 100Ω da kabul edilebilir; multi-drop için."),
-            ("LVDS", "100", "10", "TIA/EIA-644A; genel yüksek hızlı video/sinyal arayüzleri için (örneğin ekran bağlantıları)."),
-            ("HDMI", "100", "10", "HDMI spesifikasyonu; TMDS (Transition-Minimized Differential Signaling) çiftleri için."),
-            ("EtherCAT", "100", "10", "ETG spesifikasyonu; endüstriyel Ethernet, twisted-pair tabanlı."),
-            ("MIL-STD-1553", "78", "10", "ABD askeri standart; havacılık veri bus, DO-254 uyumlu tasarımlarda kullanılır."),
-            ("Profibus DP", "150", "10-20", "IEC 61158; endüstriyel otomasyon, RS-485 tabanlı."),
+            (self.current_lang["STD_INTERFACE"], self.current_lang["STD_NOMINAL_Z"], self.current_lang["STD_TOLERANCE"], self.current_lang["STD_NOTES"]),
+            ("PCI Express (PCIe, Gen1-6)", "100 (or 85 for Gen2+)", "10", self.current_lang["NOTE_PCIE"]),
+            ("Ethernet (1000BASE-T)", "100", "10", self.current_lang["NOTE_ETH"]),
+            ("USB 2.0", "90", "15", self.current_lang["NOTE_USB2"]),
+            ("USB 3.0 / 3.x", "90", "10-15", self.current_lang["NOTE_USB3"]),
+            ("CAN Bus", "120", "10-20", self.current_lang["NOTE_CAN"]),
+            ("RS-485", "120", "20", self.current_lang["NOTE_RS485"]),
+            ("RS-422", "100-120", "20", self.current_lang["NOTE_RS422"]),
+            ("LVDS", "100", "10", self.current_lang["NOTE_LVDS"]),
+            ("HDMI", "100", "10", self.current_lang["NOTE_HDMI"]),
+            ("EtherCAT", "100", "10", self.current_lang["NOTE_ETHCAT"]),
+            ("MIL-STD-1553", "78", "10", self.current_lang["NOTE_MIL"]),
+            ("Profibus DP", "150", "10-20", self.current_lang["NOTE_PROFIBUS"]),
         ]
         
         container = ttk.Frame(frame, padding="10")
         container.pack(fill="both", expand=True)
 
-        # Tabloyu oluştur
         for i, row_data in enumerate(standards_data):
             for j, cell_text in enumerate(row_data):
                 if i == 0:
-                    # Başlık Satırı
                     label = ttk.Label(container, text=cell_text, style="StandardHeader.TLabel", wraplength=200 if j == 3 else 100)
                     label.grid(row=i, column=j, sticky="nsew", padx=1, pady=1)
                 else:
-                    # Veri Satırları
                     label = ttk.Label(container, text=cell_text, style="StandardCell.TLabel", wraplength=250 if j == 3 else 100)
                     label.grid(row=i, column=j, sticky="nsew", padx=1, pady=1)
                     
-            # Sütun ağırlıklarını ayarla (Notlar sütununa daha fazla alan ver)
             container.grid_columnconfigure(j, weight=3 if j == 3 else 1)
 
 
     def get_float_or_error(self, var_name, var_value, can_be_zero=False):
         """String değeri float'a çevirir ve sıfırdan küçük/eşit olma durumunu kontrol eder."""
         try:
-            # Gerekirse virgülü noktaya çevir
+            # Gerekirse virgülü noktaya çevir (Hem 0.15 hem 0,15 kabul edilir)
             value = float(str(var_value).replace(',', '.')) 
             if not can_be_zero and value <= 0:
-                 raise ValueError(f"{var_name} sıfırdan büyük olmalıdır.")
+                 raise ValueError(f"'{var_name}' must be greater than zero.")
             return value
         except ValueError:
-            raise ValueError(f"'{var_name}' için geçerli bir sayısal değer girin (ör: 0.15 veya 0,15).")
+            raise ValueError(f"Please enter a valid numeric value for '{var_name}' (e.g., 0.15 or 0,15).")
 
     # YARDIMCI FONKSİYON: Bitişik Plane'i ve Dielektrikleri Bulma (KESİN KURAL SETİ)
     def find_nearest_plane_and_dielectric(self, signal_index):
@@ -769,7 +850,8 @@ class ImpedanceCalculatorApp:
             total_H = 0.0
             weighted_H_sum = 0.0
             
-            layer_indices = range(start_index, end_index, step)
+            # Start/end/step değerlerini Python'ın range() fonksiyonu ile uyumlu hale getir
+            layer_indices = range(start_index, end_index + step, step) # step 1 veya -1 olabilir
             
             for i in layer_indices:
                 item = self.stackup_data[i]
@@ -785,9 +867,10 @@ class ImpedanceCalculatorApp:
                         total_H += thickness
                         weighted_H_sum += thickness * er
                     except ValueError:
-                        raise Exception(f"Dielektrik kalınlığı/Dk değeri ({item[0]}) geçerli değil veya sıfır/negatif.")
+                        raise Exception(f"{self.current_lang['COL_THICKNESS']}/{self.current_lang['COL_DK']} value for layer ({item[0]}) is invalid or zero/negative.")
                 elif item[1] == "Signal":
-                     raise Exception(f"Sinyal katmanı ({self.stackup_data[signal_index][0]}) ile Plane arasında başka bir sinyal katmanı ({item[0]}) var. Stackup hatalı!")
+                     # Hata mesajı İngilizce
+                     raise Exception(f"Another signal layer ({item[0]}) found between signal layer ({self.stackup_data[signal_index][0]}) and the Plane. Stackup error!")
             
             if total_H == 0:
                 return 0.0, 1.0 
@@ -809,8 +892,8 @@ class ImpedanceCalculatorApp:
             if self.stackup_data[current_index][1] == "Plane":
                 down_plane_index = current_index
                 break
-            # Eğer karşılaşılan katman Dielektrik/Solder Mask değilse (Copper/Signal ise veya başka bir Plane değilse), arama durmalı
-            if self.stackup_data[current_index][4] == "Copper":
+            if self.stackup_data[current_index][4] == "Copper" and self.stackup_data[current_index][1] != "Plane":
+                 # Aşağıdaki katman bakır ama Plane değilse dur
                  break 
             current_index += 1
         
@@ -818,7 +901,7 @@ class ImpedanceCalculatorApp:
 
         if down_plane_index != -1:
             try:
-                H_down, Er_down = get_dielectric_properties_to_plane(signal_index + 1, down_plane_index, 1)
+                H_down, Er_down = get_dielectric_properties_to_plane(signal_index + 1, down_plane_index, 1) # Dielektrikleri al
                 ref_down = self.stackup_data[down_plane_index][0]
             except Exception as e:
                 raise e
@@ -831,8 +914,8 @@ class ImpedanceCalculatorApp:
             if self.stackup_data[current_index][1] == "Plane":
                 up_plane_index = current_index
                 break
-            # Eğer karşılaşılan katman Dielektrik/Solder Mask değilse (Copper/Signal ise veya başka bir Plane değilse), arama durmalı
-            if self.stackup_data[current_index][4] == "Copper":
+            if self.stackup_data[current_index][4] == "Copper" and self.stackup_data[current_index][1] != "Plane":
+                 # Yukarıdaki katman bakır ama Plane değilse dur
                  break
             current_index -= 1
         
@@ -840,7 +923,7 @@ class ImpedanceCalculatorApp:
 
         if up_plane_index != -1:
             try:
-                H_up, Er_up = get_dielectric_properties_to_plane(signal_index - 1, up_plane_index, -1)
+                H_up, Er_up = get_dielectric_properties_to_plane(signal_index - 1, up_plane_index, -1) # Dielektrikleri al
                 ref_up = self.stackup_data[up_plane_index][0]
             except Exception as e:
                 raise e
@@ -849,60 +932,50 @@ class ImpedanceCalculatorApp:
         # --- KARAR VERME: HANGİ PLANE KULLANILACAK? ---
         
         if is_top_layer:
-            # Kural: Top Layer sadece altındaki ilk Plane'i kullanır.
             if down_plane_index != -1 and H_down > 0:
                 return H_down, Er_down, ref_down
             else:
-                raise Exception("Top Layer için hemen altında bir 'Plane' katmanı bulunamadı. Stackup hatası!")
+                raise Exception("No 'Plane' layer found immediately below the Top Layer. Stackup error!")
                 
         elif is_bottom_layer:
-            # Kural: Bottom Layer sadece üstündeki ilk Plane'i kullanır.
             if up_plane_index != -1 and H_up > 0:
                 return H_up, Er_up, ref_up
             else:
-                raise Exception("Bottom Layer için hemen üstünde bir 'Plane' katmanı bulunamadı. Stackup hatası!")
+                raise Exception("No 'Plane' layer found immediately above the Bottom Layer. Stackup error!")
 
         else:
-            # Kural: İç sinyal katmanları (Inner Signal Layer) en yakın Plane'i kullanır.
-            
             down_available = H_down != float('inf') and H_down > 0
             up_available = H_up != float('inf') and H_up > 0
 
-            # Her iki yönde de Plane yoksa
             if not down_available and not up_available:
-                raise Exception(f"{self.stackup_data[signal_index][0]} (İç Katman) için üstte veya altta 'Plane' katmanı bulunamadı. Stackup hatalı!")
+                raise Exception(f"{self.stackup_data[signal_index][0]} (Inner Layer): No 'Plane' layer found above or below. Stackup error!")
                 
-            # Sadece aşağıda varsa
             elif down_available and not up_available:
                 return H_down, Er_down, ref_down
                 
-            # Sadece yukarıda varsa
             elif not down_available and up_available:
                 return H_up, Er_up, ref_up
             
-            # Hem aşağıda hem yukarıda varsa (En yakın olanı seç)
             elif down_available and up_available:
+                # İki Plane de varsa, en yakını seçilir
                 if H_down <= H_up:
                     return H_down, Er_down, ref_down
                 else:
                     return H_up, Er_up, ref_up
         
-        raise Exception("Referans düzlemi seçiminde beklenmedik hata oluştu (Kural seti dışı).")
+        raise Exception("Unexpected error occurred during reference plane selection.")
 
 
     def calculate_impedance(self):
-        # Hata durumunda rengi ve durumu ayarlamak için başlangıçta sıfırlama
         if self.zdiff_result_label:
             self.zdiff_result_label.config(foreground="darkred")
         if self.status_label:
             self.status_label.config(foreground="darkred")
-            self.tolerance_status_var.set("HATA")
+            self.tolerance_status_var.set(self.current_lang["ERROR_CALC"])
             
         try:
-            # --- ÖNEMLİ: Hesaplamadan önce Stackup'ı senkronize et ---
             self.update_stackup_data() 
             
-            # --- 1. Sinyal Katmanını ve T (Bakır Kalınlığını) Bul ---
             selected_layer_name = self.selected_layer.get()
             layer_index = -1
             
@@ -912,91 +985,87 @@ class ImpedanceCalculatorApp:
                     break
             
             if layer_index == -1 or selected_layer_name == "":
-                raise Exception("Lütfen hesaplama yapmak için geçerli bir Sinyal Katmanı seçin.")
+                raise Exception("Please select a valid Signal Layer for calculation.")
                 
             if self.stackup_data[layer_index][1] != "Signal": 
-                raise Exception(f"Seçilen katman ('{self.stackup_data[layer_index][1]}') sadece 'Signal' sınıfında olmalıdır.")
+                raise Exception(f"{self.current_lang['ERROR_INPUT']}: Layer Class ('{self.stackup_data[layer_index][1]}') must be 'Signal'.")
 
             T_str = self.entry_vars[layer_index][2].get()
-            T = self.get_float_or_error(f"{selected_layer_name} Thickness (T)", T_str)
+            T = self.get_float_or_error(f"{selected_layer_name} {self.current_lang['COL_THICKNESS']} (T)", T_str)
 
-            
-            # --- 2. H ve Er değerlerini Bitişik Plane'e göre bul ---
             H, Er, reference_plane_name = self.find_nearest_plane_and_dielectric(layer_index)
             
             if H <= 0 or Er <= 0:
-                raise Exception(f"Dielektrik Yüksekliği (H={H:.3f}) veya Dk (Er={Er:.2f}) sıfır veya negatif çıktı. Stackup parametrelerini kontrol edin.")
+                # Hata mesajları İngilizce'ye çevrildi
+                raise Exception(f"{self.current_lang['ERROR_INPUT']}: {self.current_lang['COL_THICKNESS']} (H={H:.3f}) or Dk (Er={Er:.2f}) is zero or negative. Check stackup parameters.")
             
-            # --- 3. Geometri Değerlerini Al ve Kontrol Et ---
-            W_input = self.get_float_or_error("İz Genişliği (W)", self.W_var.get())
-            Gap_input = self.get_float_or_error("İzler Arası Boşluk (Gap)", self.Gap_var.get())
-            S_input = self.get_float_or_error("Yan Toprağa Boşluk (S)", self.S_var.get())
+            W_input = self.get_float_or_error(self.current_lang["LABEL_W"].split(':')[0], self.W_var.get())
+            Gap_input = self.get_float_or_error(self.current_lang["LABEL_GAP"].split(':')[0], self.Gap_var.get())
+            S_input = self.get_float_or_error(self.current_lang["LABEL_S"].split(':')[0], self.S_var.get())
 
-            # --- 4. Hedef Empedans ve Tolerans Kontrolü Girişleri ---
-            Target_Z0 = self.get_float_or_error("Hedef Empedans (Z0)", self.target_zdiff_var.get())
+            Target_Z0 = self.get_float_or_error(self.current_lang["LABEL_Z0_TARGET"].split(':')[0], self.target_zdiff_var.get())
             
             Tolerance_P_str = self.tolerance_percent_var.get()
-            Tolerance_P = self.get_float_or_error("Tolerans (%)", Tolerance_P_str, can_be_zero=True)
+            Tolerance_P = self.get_float_or_error(self.current_lang["LABEL_TOLERANCE"].split(':')[0], Tolerance_P_str, can_be_zero=True)
             if Tolerance_P < 0:
-                 raise ValueError("Tolerans yüzdesi negatif olamaz.")
+                 raise ValueError(self.current_lang["LABEL_TOLERANCE"] + " percentage cannot be negative.")
 
 
-            # --- 5. Model Seçimi ve Hesaplama ---
             WH_ratio = W_input / H
-            model_used = f"Referans Düzlemi: {reference_plane_name}. Model: "
-            cpwg_note = "(Yan Toprak S ihmal edildi, çünkü S > H)"
+            # Metin oluşturma işlemi İngilizce olarak ayarlandı
+            model_base = self.current_lang['LABEL_MODEL'].split(':')[0]
+            model_used = f"{model_base}: Reference Plane is {reference_plane_name}. Model: "
+            cpwg_note = self.current_lang["CPWG_IGNORED"]
             
             if WH_ratio >= 1.0:
-                model_used += f"Rejim 1: GENİŞ İz (W/H={WH_ratio:.2f}) - 'Best-Fit' Formül"
+                model_used += f"Regime 1: WIDE Trace (W/H={WH_ratio:.2f}) - 'Best-Fit' Formula"
                 Zdiff_result = calculate_wide_traces(W_input, Gap_input, T, H, Er)
             else:
-                model_used += f"Rejim 2: DAR İz (W/H={WH_ratio:.2f}) - 'Akademik' Formül"
+                model_used += f"Regime 2: NARROW Trace (W/H={WH_ratio:.2f}) - 'Academic' Formula"
                 Zdiff_result = calculate_narrow_traces(W_input, Gap_input, T, H, Er)
             
             if S_input < H:
-                cpwg_note = "(Yan Toprak S ETKİN! CPWG Düzeltmesi Uygulandı)"
+                cpwg_note = self.current_lang["CPWG_APPLIED"]
                 coplanar_factor = math.pow(S_input / (S_input + 0.5 * W_input), 0.1)
                 Zdiff_result *= coplanar_factor
 
             self.Zdiff_result.set(f"{Zdiff_result:.2f}")
             
-            # Tolerans Kontrolü, Renk ve Durum Güncelleme
             Tolerance_Factor = Tolerance_P / 100.0
             Lower_Limit = Target_Z0 * (1.0 - Tolerance_Factor)
             Upper_Limit = Target_Z0 * (1.0 + Tolerance_Factor)
 
             if Lower_Limit <= Zdiff_result <= Upper_Limit:
                 result_color = "green"
-                status_text = f"Empedans UYGUN ({Lower_Limit:.2f}Ω - {Upper_Limit:.2f}Ω aralığında)"
+                status_text = f"{self.current_lang['STATUS_OK']} (Target range: {Lower_Limit:.2f}Ω - {Upper_Limit:.2f}Ω)"
                 status_color = "green"
             else:
                 result_color = "red"
-                status_text = f"Empedans UYGUN DEĞİL (Hedef aralık: {Lower_Limit:.2f}Ω - {Upper_Limit:.2f}Ω)"
+                status_text = f"{self.current_lang['STATUS_FAIL']} (Target range: {Lower_Limit:.2f}Ω - {Upper_Limit:.2f}Ω)"
                 status_color = "red"
                 
-            # Etiketleri ayarla
             self.zdiff_result_label.config(foreground=result_color)
             self.tolerance_status_var.set(status_text)
             self.status_label.config(foreground=status_color)
 
             self.model_info.set(model_used)
             self.cpwg_info.set(cpwg_note)
-            self.params_used.set(f"H={H:.3f} mm (Referans Mesafesi), T={T:.3f} mm, Er={Er:.2f} (Etkin)")
+            self.params_used.set(f"H={H:.3f} mm ({self.current_lang['MAP_H']}), T={T:.3f} mm, Er={Er:.2f} ({self.current_lang['MAP_ER']})")
 
         except ValueError as e:
-            messagebox.showerror("Giriş Hatası", f"Hata: {e}")
-            self.Zdiff_result.set("HATA")
+            messagebox.showerror(self.current_lang["ERROR_INPUT"], f"{self.current_lang['ERROR_INPUT']}: {e}")
+            self.Zdiff_result.set("ERROR")
             self.model_info.set("---")
             self.cpwg_info.set("---")
             self.params_used.set("---")
-            self.tolerance_status_var.set("Giriş Hatası")
+            self.tolerance_status_var.set(self.current_lang["ERROR_INPUT"])
         except Exception as e:
-            messagebox.showerror("Hesaplama Hatası", f"Beklenmeyen bir hata oluştu: {e}")
-            self.Zdiff_result.set("HATA")
+            messagebox.showerror(self.current_lang["ERROR_CALC"], f"{self.current_lang['ERROR_UNKNOWN']}: {e}")
+            self.Zdiff_result.set("ERROR")
             self.model_info.set("---")
             self.cpwg_info.set("---")
             self.params_used.set("---")
-            self.tolerance_status_var.set("Hesaplama Hatası")
+            self.tolerance_status_var.set(self.current_lang["ERROR_CALC"])
 
 
 # Ana Pencereyi Oluşturma ve Uygulamayı Başlatma
@@ -1006,4 +1075,4 @@ if __name__ == "__main__":
         app = ImpedanceCalculatorApp(root)
         root.mainloop()
     except Exception as e:
-        print(f"Uygulama başlatılırken kritik hata oluştu: {e}")
+        print(f"Critical error occurred during application startup: {e}")
