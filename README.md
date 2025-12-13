@@ -1,10 +1,16 @@
 # PCB-Differential-Impedance-Calculator
-Useful for Kicad :)
+# Python 3.8 or later is required.
+Useful for Kicad 
 
-<img width="726" height="706" alt="image" src="https://github.com/user-attachments/assets/34894906-a782-480b-b7a3-013751d8a462" />
+<img width="871" height="744" alt="image" src="https://github.com/user-attachments/assets/4b20f09b-0833-4964-bd90-79cff0648b4d" />
 
-<img width="728" height="708" alt="image" src="https://github.com/user-attachments/assets/4da314aa-280a-4ae6-9d32-a0ce1f7f464b" />
+<img width="870" height="744" alt="image" src="https://github.com/user-attachments/assets/bdb10b3c-c894-42b4-a8e3-727a357fa67c" />
 
-<img width="725" height="705" alt="image" src="https://github.com/user-attachments/assets/fb1e5892-48e2-41be-a5a9-61a5490f0be8" />
+<img width="877" height="745" alt="image" src="https://github.com/user-attachments/assets/2b9a036a-1da4-4687-9d37-ddfc24a75767" />
+
+
+
+
+
 
 
