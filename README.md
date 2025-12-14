@@ -4,7 +4,9 @@ Useful for Kicad
 
 # Installation
 -Download the “KiCad-Differential-Impedance-Calculator .py” file from the link below,
+
 -If Python version 3.8 or higher is not installed on your computer, download and install it (if it is already installed, no reinstallation is required),
+
 -Finally, double-click the “KiCad-Differential-Impedance-Calculator .py” file to run the program.
 
 
