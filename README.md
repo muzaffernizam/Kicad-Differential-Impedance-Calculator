@@ -9,8 +9,10 @@ Useful for Kicad
 
 
 # Calculation method is shown with c++ code
-<img width="709" height="360" alt="image" src="https://github.com/user-attachments/assets/56f49021-fb8c-43c2-b8dd-865292717156" />
-<img width="735" height="335" alt="image" src="https://github.com/user-attachments/assets/188ef725-137c-4765-ba0a-f5f52f34ba87" />
+<img width="558" height="244" alt="image" src="https://github.com/user-attachments/assets/a1eba4df-7fc0-43d6-9d46-0a7aed01281b" />
+<img width="568" height="294" alt="image" src="https://github.com/user-attachments/assets/1599e925-5432-4bf2-b1a4-1800688b5621" />
+
+
 
 
 # Tool Picture;
